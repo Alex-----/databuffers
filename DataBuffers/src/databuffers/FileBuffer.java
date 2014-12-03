@@ -23,13 +23,12 @@ public class FileBuffer implements Sendable {
 
 	public FileBuffer(Path path, boolean compress) throws IOException {
 		buffers = new WeakHashMap<>();
-		try (SeekableByteChannel sbc = Files.newByteChannel(path);
-				InputStream in = Channels.newInputStream(sbc)) {
-			if (compress) {
+		try(SeekableByteChannel sbc = Files.newByteChannel(path);
+				InputStream in = Channels.newInputStream(sbc)){
+			if(compress){
 				int size = (int) sbc.size();
 				byte[] data = new byte[size];
-				for (int n, nread = 0; (n = in.read(data, nread, size - nread)) > 0; nread += n)
-					;
+				for(int n, nread = 0; (n = in.read(data, nread, size - nread)) > 0; nread += n);
 				ByteArrayOutputStream out = new ByteArrayOutputStream();
 				new DataSinkBuffer(4).writeInt(data.length).send(out);
 				DeflaterOutputStream zip = new DeflaterOutputStream(out, new Deflater(COMPRESSION));
@@ -46,17 +45,17 @@ public class FileBuffer implements Sendable {
 				new DataOutputStream(out).writeInt(size);
 				byte[] s = out.toByteArray();
 				data = Arrays.copyOf(s, size + 4);
-				for (int n, nread = 0; (n = in.read(data, nread + 4, size - nread)) > 0; nread += n)
-					;
+				for(int n, nread = 0; (n = in.read(data, nread + 4, size - nread)) > 0; nread += n);
 			}
 		}
 	}
+	
 	@Override
 	public boolean send(SocketChannel out) throws IOException {
 		ByteBuffer sendBuffer = buffers.computeIfAbsent(out, c -> ByteBuffer.wrap(data));
 		out.write(sendBuffer);
 		boolean finished = !sendBuffer.hasRemaining();
-		if (finished) {
+		if(finished){
 			buffers.remove(out);
 		}
 		return finished;
