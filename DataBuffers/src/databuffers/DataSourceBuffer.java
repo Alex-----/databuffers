@@ -1,23 +1,35 @@
 package databuffers;
 
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.DatagramPacket;
+import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
 import java.util.Arrays;
 import java.util.function.IntConsumer;
+import java.util.zip.InflaterInputStream;
 
-public class DataSourceBuffer extends SourceBuffer implements DataSource {
+public class DataSourceBuffer extends Buffer implements DataSource {
+	private final byte[] data;
 
 	public DataSourceBuffer(byte[] data){
 		this(data, 0, data.length);
 	}
 	public DataSourceBuffer(byte[] data, int offset, int limit){
-		super(data, offset, limit);
+		super(offset, limit);
+		this.data = data;
 	}
-	
 	public DataSourceBuffer(DatagramPacket packet){
 		this(packet.getData(), packet.getOffset(), packet.getOffset() + packet.getLength());
+	}
+	
+	@Override
+	public int read(){
+		checkBounds(position);
+		return data[position++] & 0xFF;
 	}
 	@Override
 	public byte[] readByteArray(int len){
@@ -27,9 +39,16 @@ public class DataSourceBuffer extends SourceBuffer implements DataSource {
 		checkBounds(position + len - 1);
 		return Arrays.copyOfRange(data, position, position += len);
 	}
-	@Override
 	public DataSourceBuffer uncompress(){
-		return (DataSourceBuffer) super.uncompress();
+		int length = readInt();
+		byte[] data = new byte[length];
+		ByteArrayInputStream bin = new ByteArrayInputStream(this.data, 4, this.data.length - 4);
+		try(InflaterInputStream in = new InflaterInputStream(bin)){
+			for(int n, nread = 0; (n = in.read(data, nread, length - nread)) > 0; nread += n);
+			return new DataSourceBuffer(data);
+		} catch(IOException e){
+			throw new AssertionError(e);
+		}
 	}
 	public static DataSourceBuffer read(InputStream in) throws IOException {
 		return read(in, i -> {});
@@ -40,25 +59,74 @@ public class DataSourceBuffer extends SourceBuffer implements DataSource {
 	public static DataSourceBuffer read(InputStream in, int limit) throws IOException {
 		return read(in, limit, i -> {});
 	}
-	public static DataSourceBuffer read(InputStream in, int limit, IntConsumer read)
-			throws IOException {
-		return (DataSourceBuffer) SourceBuffer.read(in, limit, read);
+	public static DataSourceBuffer read(InputStream in, int limit, IntConsumer read) throws IOException {
+		DataInputStream di = new DataInputStream(in);
+		int size = di.readInt();
+		if(size > limit){
+			throw new IllegalStateException("size > limit");
+		}
+		byte[] data = new byte[size];
+		for(int n = 0; n < size;){
+			int count = in.read(data, n, size - n);
+			if(count < 0)
+				throw new EOFException();
+			n += count;
+			read.accept(count);
+		}
+		return new DataSourceBuffer(data);
 	}
 
-	public static class Reader extends SourceBuffer.Reader {
+	public static class Reader {
+		private ByteBuffer buffer = ByteBuffer.allocate(4);
+		private boolean readingLength = true;
+		private final int limit;
 
 		public Reader(){
-			super(Integer.MAX_VALUE);
+			this(Integer.MAX_VALUE);
 		}
 		public Reader(int limit){
-			super(limit);
+			this.limit = limit;
 		}
 		
 		public DataSourceBuffer read(SocketChannel in, Runnable close) throws IOException {
-			return (DataSourceBuffer) super.read(in, close);
+			if(in.read(buffer) == -1){
+				close.run();
+				return null;
+			}
+			if(buffer.hasRemaining()){
+				return null;
+			}
+			if(readingLength){
+				readingLength = false;
+				buffer.flip();
+				int size = buffer.getInt();
+				if(size > limit){
+					throw new IllegalStateException("size > limit");
+				}
+				buffer = ByteBuffer.allocate(size);
+				return read(in, close);
+			}
+			readingLength = true;
+			byte[] data = buffer.array();
+			buffer = ByteBuffer.allocate(4);
+			return new DataSourceBuffer(data);
 		}
 	}
 
+	public byte[] buffer(){
+		return data;
+	}
+	@Override
+	public int length(){
+		return limit - position;
+	}
+	@Override
+	public <T, E extends Throwable> T copy(ArrayCopier<T, E> copier) throws E {
+		return copier.copy(data, position, length());
+	}
+	public boolean hasNext(){
+		return position < limit;
+	}
 	public DataSourceBuffer readImbeded(){
 		return new DataSourceBuffer(readBytes());
 	}

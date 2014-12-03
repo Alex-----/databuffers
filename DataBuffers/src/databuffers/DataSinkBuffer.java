@@ -1,22 +1,32 @@
 package databuffers;
 
+import java.util.Arrays;
 import java.util.EnumSet;
 
-public class DataSinkBuffer extends SinkBuffer implements DataSink {
+public class DataSinkBuffer extends Buffer implements DataSink {
+	private byte[] data;
 
 	public DataSinkBuffer(){
 		this(50);
 	}
 	public DataSinkBuffer(int initialCapacity){
-		super(initialCapacity);
+		this(new byte[initialCapacity]);
 	}
 	public DataSinkBuffer(byte[] sink){
 		this(sink, 0, sink.length);
 	}
 	public DataSinkBuffer(byte[] sink, int offset, int limit){
-		super(sink, offset, limit);
+		super(offset, limit);
+		data = sink;
 	}
-	
+
+	@Override
+	public DataSinkBuffer write(int v){
+		resize(1);
+		checkBounds(position);
+		data[position++] = (byte) v;
+		return this;
+	}
 	@Override
 	public DataSinkBuffer writeByteArray(byte[] b, int offset, int length){
 		if(length == 0) return this; 
@@ -27,10 +37,29 @@ public class DataSinkBuffer extends SinkBuffer implements DataSink {
 		position += length; 
 		return this;
 	}
-	@Override public DataSourceBuffer asSource(){ return (DataSourceBuffer) super.asSource(); }
-	@Override public DataSourceBuffer asSourceCopy(){ return (DataSourceBuffer) super.asSourceCopy(); }
-	@Override public DataSinkBuffer append(Buffer b){ super.append(b); return this; }
-	@Override public DataSinkBuffer write(int v){ super.write(v); return this; }
+	void resize(int length){
+		if(position + length > limit){
+			data = Arrays.copyOf(data, limit = Math.max(position + length, limit + (limit >> 1)));
+		}
+	}
+	@Override
+	public int length(){
+		return position - offset;
+	}
+	@Override
+	public <T, E extends Throwable> T copy(ArrayCopier<T, E> copier) throws E {
+		return copier.copy(data, offset, length());
+	}
+	public DataSinkBuffer append(Buffer b){
+		b.copy(this::writeByteArray);
+		return this;
+	}
+	public DataSourceBuffer asSource(){
+		return new DataSourceBuffer(data, offset, position);
+	}
+	public DataSourceBuffer asSourceCopy(){
+		return new DataSourceBuffer(Arrays.copyOfRange(data, offset, position));
+	}
 	@Override public DataSinkBuffer writeByte(byte b){ DataSink.super.writeByte(b); return this; }
 	@Override public DataSinkBuffer writeString(String s){ DataSink.super.writeString(s); return this; }
 	@Override public DataSinkBuffer writeNullableString(String s){ DataSink.super.writeNullableString(s); return this; }
