@@ -14,7 +14,7 @@ public interface DataSource extends Source {
 	default char readChar(){
 		return (char)((read() << 8) | read());
 	}
-	default int readInt() {
+	default int readInt(){
 		return (read() << 24) | (read() << 16) | (read() << 8) | read();
 	}
 	default long readLong(){
@@ -26,9 +26,9 @@ public interface DataSource extends Source {
 	default double readDouble(){
 		return Double.longBitsToDouble(readLong());
 	}
-	default byte[] readByteArray(int len){
-		byte[] b = new byte[len];
-		for(int i = 0; i < len; i++){
+	default byte[] readByteArray(int length){
+		byte[] b = new byte[length];
+		for(int i = 0; i < length; i++){
 			b[i] = readByte();
 		}
 		return b;

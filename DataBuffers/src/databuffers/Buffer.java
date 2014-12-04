@@ -46,7 +46,7 @@ public abstract class Buffer implements Sendable {
 	}
 	public abstract int length();
 	public abstract <T, E extends Throwable> T copy(ArrayCopier<T, E> copier) throws E;
-	public <E extends Throwable> void copyv(ArrayCopierV<?, E> copier) throws E {
+	public final <E extends Throwable> void copyv(ArrayCopierV<?, E> copier) throws E {
 		copy(copier);
 	}
 	public void send(OutputStream out) throws IOException {

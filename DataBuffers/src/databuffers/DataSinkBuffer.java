@@ -17,6 +17,9 @@ public class DataSinkBuffer extends Buffer implements DataSink {
 	}
 	public DataSinkBuffer(byte[] sink, int offset, int limit){
 		super(offset, limit);
+		if(offset < 0) throw new IllegalArgumentException("offset < 0");
+		if(limit > sink.length) throw new IllegalArgumentException("limit > sink.length");
+		if(limit < offset) throw new IllegalArgumentException("limit < offset");
 		data = sink;
 	}
 
@@ -37,7 +40,7 @@ public class DataSinkBuffer extends Buffer implements DataSink {
 		position += length; 
 		return this;
 	}
-	void resize(int length){
+	private void resize(int length){
 		if(position + length > limit){
 			data = Arrays.copyOf(data, limit = Math.max(position + length, limit + (limit >> 1)));
 		}

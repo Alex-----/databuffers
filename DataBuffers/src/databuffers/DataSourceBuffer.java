@@ -15,15 +15,18 @@ import java.util.zip.InflaterInputStream;
 public class DataSourceBuffer extends Buffer implements DataSource {
 	private final byte[] data;
 
+	public DataSourceBuffer(DatagramPacket packet){
+		this(packet.getData(), packet.getOffset(), packet.getOffset() + packet.getLength());
+	}
 	public DataSourceBuffer(byte[] data){
 		this(data, 0, data.length);
 	}
 	public DataSourceBuffer(byte[] data, int offset, int limit){
 		super(offset, limit);
+		if(offset < 0) throw new IllegalArgumentException("offset < 0");
+		if(limit > data.length) throw new IllegalArgumentException("limit > data.length");
+		if(limit < offset) throw new IllegalArgumentException("limit < offset"); 
 		this.data = data;
-	}
-	public DataSourceBuffer(DatagramPacket packet){
-		this(packet.getData(), packet.getOffset(), packet.getOffset() + packet.getLength());
 	}
 	
 	@Override
@@ -32,18 +35,17 @@ public class DataSourceBuffer extends Buffer implements DataSource {
 		return data[position++] & 0xFF;
 	}
 	@Override
-	public byte[] readByteArray(int len){
-		if(len == 0) return new byte[0];
-		if(len < 0) throw new IllegalArgumentException("length < 0");
+	public byte[] readByteArray(int length){
+		if(length == 0) return new byte[0];
+		if(length < 0) throw new IllegalArgumentException("length < 0");
 		checkBounds(position);
-		checkBounds(position + len - 1);
-		return Arrays.copyOfRange(data, position, position += len);
+		checkBounds(position + length - 1);
+		return Arrays.copyOfRange(data, position, position += length);
 	}
 	public DataSourceBuffer uncompress(){
 		int length = readInt();
 		byte[] data = new byte[length];
-		ByteArrayInputStream bin = new ByteArrayInputStream(this.data, 4, this.data.length - 4);
-		try(InflaterInputStream in = new InflaterInputStream(bin)){
+		try(InflaterInputStream in = new InflaterInputStream(copy(ByteArrayInputStream::new))){
 			for(int n, nread = 0; (n = in.read(data, nread, length - nread)) > 0; nread += n);
 			return new DataSourceBuffer(data);
 		} catch(IOException e){
